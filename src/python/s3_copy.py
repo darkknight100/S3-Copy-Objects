@@ -4,36 +4,36 @@ import urllib
 import os
 
 
-class S3Copy:
+def lambda_handler(event, context):
 
-    def lambda_handler(self, event, context):
+    # Creating s3 session
+    s3 = get_s3_client()
 
-        # Creating s3 session
-        s3 = self.get_s3_client()
+    sns_message = ast.literal_eval(event['Records'][0]['Sns']['Message'])
 
-        sns_message = ast.literal_eval(event['Records'][0]['Sns']['Message'])
+    # target_bucket declaration
+    target_bucket = os.environ['dbHost']
 
-        # target_bucket declaration
-        target_bucket = os.environ['dbHost']
+    source_bucket = str(sns_message['Records'][0]['s3']['bucket']['name'])
 
-        source_bucket = str(sns_message['Records'][0]['s3']['bucket']['name'])
+    key = str(urllib.unquote_plus(sns_message['Records'][0]['s3']['object']['key']).decode('utf8'))
 
-        key = str(urllib.unquote_plus(sns_message['Records'][0]['s3']['object']['key']).decode('utf8'))
+    copy_source = {'Bucket': source_bucket, 'Key': key}
 
-        copy_source = {'Bucket': source_bucket, 'Key': key}
+    print "Copying %s from bucket %s to bucket %s ..." % (key, source_bucket, target_bucket)
 
-        print "Copying %s from bucket %s to bucket %s ..." % (key, source_bucket, target_bucket)
+    try:
+        s3.copy_object(Bucket=target_bucket, Key=key, CopySource=copy_source)
 
-        try:
-            s3.copy_object(Bucket=target_bucket, Key=key, CopySource=copy_source)
+    except:
+        raise Exception("There is some error in copying s3 objects")
 
-        except:
-            raise Exception("There is some error in copying s3 objects")
 
-    @staticmethod
-    def get_s3_client(self):
+def get_s3_client(self):
 
-        should_assume_cross_account = os.environ['should_assume_cross_account']
+    should_assume_cross_account = os.environ['should_assume_cross_account']
+
+    if should_assume_cross_account:
 
         sts_client = boto3.client('sts')
 
@@ -50,5 +50,7 @@ class S3Copy:
             aws_secret_access_key=credentials['SecretAccessKey'],
             aws_session_token=credentials['SessionToken']
         )
+    else:
+        s3_session = boto3.Session
 
-        return s3_session.client()
+    return s3_session.client()
