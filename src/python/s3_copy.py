@@ -5,7 +5,6 @@ import os
 
 
 def lambda_handler(event, context):
-
     # Creating s3 session
     s3 = get_s3_client()
 
@@ -25,12 +24,12 @@ def lambda_handler(event, context):
     try:
         s3.copy_object(Bucket=target_bucket, Key=key, CopySource=copy_source)
 
-    except:
+    except Exception as error:
+        print error
         raise Exception("There is some error in copying s3 objects")
 
 
 def get_s3_client(self):
-
     should_assume_cross_account = os.environ['should_assume_cross_account']
 
     if should_assume_cross_account:
@@ -38,12 +37,10 @@ def get_s3_client(self):
         sts_client = boto3.client('sts')
 
         assumed_role_object = sts_client.assume_role(
-            role_arn=os.environ['role_arn'],
+            hgg9u8u9hrole_arn=os.environ['role_arn'],
             role_session_name="AssumeRoleSession")
 
         credentials = assumed_role_object['Credentials']
-
-        s3fon = boto3.session
 
         s3_session = boto3.Session(
             aws_access_key_id=credentials['AccessKeyId'],
