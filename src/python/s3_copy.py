@@ -1,53 +1,60 @@
-import boto3
 import ast
 import urllib
 import os
+import logging
+import boto3
+from botocore.exceptions import ClientError
 
 
 def lambda_handler(event, context):
     # Creating s3 session
-    s3 = get_s3_client()
+    s3 = boto3.client('s3')
 
-    sns_message = ast.literal_eval(event['Records'][0]['Sns']['Message'])
+    print event
 
-    # target_bucket declaration
-    target_bucket = os.environ['dbHost']
+    if 'Records' in event:
+        if 'Sns' in event['Records'][0]:
+            if 'Message' in event['Records'][0]['Sns']:
+                sns_message = ast.literal_eval(event['Records'][0]['Sns']['Message'])
 
-    source_bucket = str(sns_message['Records'][0]['s3']['bucket']['name'])
+                print sns_message
 
-    key = str(urllib.unquote_plus(sns_message['Records'][0]['s3']['object']['key']).decode('utf8'))
+                # target_bucket declaration
+                target_bucket = os.environ['target_bucket']
 
-    copy_source = {'Bucket': source_bucket, 'Key': key}
+                source_bucket = str(sns_message['Records'][0]['s3']['bucket']['name'])
 
-    print "Copying %s from bucket %s to bucket %s ..." % (key, source_bucket, target_bucket)
+                key = str(urllib.unquote_plus(sns_message['Records'][0]['s3']['object']['key']).decode('utf8'))
 
+                print "Copying %s from bucket %s to bucket %s ..." % (key, source_bucket, target_bucket)
+
+                # Set up logging
+                logging.basicConfig(level=logging.DEBUG,
+                                    format='%(levelname)s: %(asctime)s: %(message)s')
+
+                # Copy the object
+                success = copy_object(source_bucket, key, target_bucket)
+                if success:
+                    print "Successfully Copied {0}/{1} to {2}/{1}".format(source_bucket, key, target_bucket)
+                    logging.info("Successfully Copied {0}/{1} to {2}/{1}".format(source_bucket, key, target_bucket))
+                else:
+                    print "Unsuccessful copy {0}/{1} to {2}/{1}".format(source_bucket, key, target_bucket)
+                    logging.info("Unsuccessful copy {0}/{1} to {2}/{1}".format(source_bucket, key, target_bucket))
+
+
+def copy_object(src_bucket_name, src_object_name,
+                destination_bucket_name, destination_object_name=None):
+    # Construct source bucket/object parameter
+    copy_source = {'Bucket': src_bucket_name, 'Key': src_object_name}
+    if destination_object_name is None:
+        destination_object_name = src_object_name
+
+    # Copy the object
+    s3 = boto3.client('s3')
     try:
-        s3.copy_object(Bucket=target_bucket, Key=key, CopySource=copy_source)
-
-    except Exception as error:
-        print error
-        raise Exception("There is some error in copying s3 objects")
-
-
-def get_s3_client(self):
-    should_assume_cross_account = os.environ['should_assume_cross_account']
-
-    if should_assume_cross_account:
-
-        sts_client = boto3.client('sts')
-
-        assumed_role_object = sts_client.assume_role(
-            hgg9u8u9hrole_arn=os.environ['role_arn'],
-            role_session_name="AssumeRoleSession")
-
-        credentials = assumed_role_object['Credentials']
-
-        s3_session = boto3.Session(
-            aws_access_key_id=credentials['AccessKeyId'],
-            aws_secret_access_key=credentials['SecretAccessKey'],
-            aws_session_token=credentials['SessionToken']
-        )
-    else:
-        s3_session = boto3.Session
-
-    return s3_session.client()
+        s3.copy_object(ACL='bucket-owner-full-control', CopySource=copy_source, Bucket=destination_bucket_name,
+                       Key=destination_object_name)
+    except ClientError as e:
+        logging.error(e)
+        return False
+    return True
